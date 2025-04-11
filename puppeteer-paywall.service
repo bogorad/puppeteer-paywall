@@ -6,7 +6,6 @@ After=network.target
 Type=simple
 User=chuck
 WorkingDirectory=/home/chuck/git/puppeteer-paywall
-; ExecStart=/usr/bin/xvfb-run -a /usr/bin/node /home/chuck/git/puppeteer-paywall/server.js
 ExecStart=/usr/bin/xvfb-run -a /usr/bin/node /home/chuck/git/puppeteer-paywall/server-optimus.js
 Restart=always
 RestartSec=5

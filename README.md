@@ -22,4 +22,9 @@ A simple Express API for scraping HTML elements from web pages using Puppeteer, 
 git clone https://github.com/yourusername/puppeteer-element-scraper.git
 cd puppeteer-element-scraper
 npm install
+```
 
+## Run with
+
+```bash
+xvfb-run -a node ./puppeteer-paywall/server-optimus.js
