@@ -1,0 +1,25 @@
+[Unit]
+Description=puppeteer-paywall Node.js Service
+After=network.target
+
+[Service]
+Type=simple
+User=chuck
+WorkingDirectory=/home/chuck/git/puppeteer-paywall
+; ExecStart=/usr/bin/xvfb-run -a /usr/bin/node /home/chuck/git/puppeteer-paywall/server.js
+ExecStart=/usr/bin/xvfb-run -a /usr/bin/node /home/chuck/git/puppeteer-paywall/server-optimus.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=EXECUTABLE_PATH=/usr/lib/chromium/chromium
+Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies-1.1.4/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master"
+StandardOutput=journal
+StandardError=journal
+
+
+# If your project uses environment variables or a .env file, source it or set here
+# Environment=MY_ENV_VAR=xyz
+
+[Install]
+WantedBy=multi-user.target
+
