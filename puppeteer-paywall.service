@@ -11,7 +11,7 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=EXECUTABLE_PATH=/usr/lib/chromium/chromium
-Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies-1.1.4/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master"
+Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master"
 StandardOutput=journal
 StandardError=journal
 

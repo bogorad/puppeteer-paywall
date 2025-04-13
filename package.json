@@ -1,18 +1,9 @@
 {
-  "name": "puppeteer-paywall",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "dotenv": "^16.5.0",
-    "express": "^5.1.0",
-    "puppeteer-core": "^24.6.0",
+    "fs": "^0.0.1-security",
+    "os": "^0.1.2",
+    "puppeteer-core": "^24.6.1",
     "rimraf": "^6.0.1"
   }
 }
