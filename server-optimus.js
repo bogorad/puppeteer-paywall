@@ -125,10 +125,14 @@ app.post('/scrape', async (req, res) => {
     });
     logDebug(`[NAVIGATE] Page loaded successfully: ${url}`);
 
+    // Moving mouse and scrolling
+    logDebug(`[NAVIGATE END] move and scroll.`);
+    await page.mouse.move(100, 100);
+    await page.evaluate(() => window.scrollBy(0, 200));
+
     const postNavDelay = (method === 'xpath') ? 5000 : 2000; // << choose duration per your needs
     logDebug(`[DELAY] Waiting ${postNavDelay / 1000} seconds after navigation before extraction...`);
     await new Promise(resolve => setTimeout(resolve, postNavDelay));
-
 
     // --- 6. Extract Data (Conditional Logic: XPath vs CSS) ---
     let extractedData;
