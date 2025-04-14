@@ -112,7 +112,7 @@ app.post('/scrape', async (req, res) => {
     await page.setViewport({ width: 1280, height: 720 });
 
     logDebug('[NAVIGATE] Setting User-Agent...');
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36');
 
     // Optional Delay
     logDebug('[DELAY] Waiting 3 seconds before navigating...');
@@ -125,19 +125,22 @@ app.post('/scrape', async (req, res) => {
     });
     logDebug(`[NAVIGATE] Page loaded successfully: ${url}`);
 
+    const postNavDelay = (method === 'xpath') ? 5000 : 2000; // << choose duration per your needs
+    logDebug(`[DELAY] Waiting ${postNavDelay / 1000} seconds after navigation before extraction...`);
+    await new Promise(resolve => setTimeout(resolve, postNavDelay));
+
+
     // --- 6. Extract Data (Conditional Logic: XPath vs CSS) ---
     let extractedData;
 
     if (method === 'xpath') {
-      // --- 6a. XPath Extraction Logic ---
       logDebug(`[XPATH] Evaluating XPath selector: ${selector}`);
       extractedData = await page.evaluate((xpathSelector) => {
-        // Browser-side code - cannot use logDebug here directly
-        // console.log calls inside evaluate only appear if dumpio is true
+        // Always returns an array
         try {
           const result = document.evaluate(xpathSelector, document, null, XPathResult.ANY_TYPE, null);
           const results = [];
-          const processNode = (node) => { /* ... same as before ... */
+          const processNode = (node) => {
             if (!node) return null;
             switch (node.nodeType) {
               case Node.ELEMENT_NODE: return node.outerHTML;
@@ -146,39 +149,45 @@ app.post('/scrape', async (req, res) => {
               default: return `Unsupported node type: ${node.nodeType}`;
             }
           };
-          switch (result.resultType) { /* ... same as before ... */
-            case XPathResult.NUMBER_TYPE: return result.numberValue;
-            case XPathResult.STRING_TYPE: return result.stringValue;
-            case XPathResult.BOOLEAN_TYPE: return result.booleanValue;
-            case XPathResult.UNORDERED_NODE_ITERATOR_TYPE: case XPathResult.ORDERED_NODE_ITERATOR_TYPE:
-              let node; while ((node = result.iterateNext())) { results.push(processNode(node)); } return results;
-            case XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE: case XPathResult.ORDERED_NODE_SNAPSHOT_TYPE:
-              for (let i = 0; i < result.snapshotLength; i++) { results.push(processNode(result.snapshotItem(i))); } return results;
-            case XPathResult.ANY_UNORDERED_NODE_TYPE: case XPathResult.FIRST_ORDERED_NODE_TYPE:
-              return processNode(result.singleNodeValue);
-            default: return `Unknown XPathResult type: ${result.resultType}`;
+          switch (result.resultType) {
+            case XPathResult.NUMBER_TYPE: return [result.numberValue];
+            case XPathResult.STRING_TYPE: return [result.stringValue];
+            case XPathResult.BOOLEAN_TYPE: return [result.booleanValue];
+            case XPathResult.UNORDERED_NODE_ITERATOR_TYPE:
+            case XPathResult.ORDERED_NODE_ITERATOR_TYPE:
+              { let node; while ((node = result.iterateNext())) { results.push(processNode(node)); } return results; }
+            case XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE:
+            case XPathResult.ORDERED_NODE_SNAPSHOT_TYPE:
+              { for (let i = 0; i < result.snapshotLength; i++) { results.push(processNode(result.snapshotItem(i))); } return results; }
+            case XPathResult.ANY_UNORDERED_NODE_TYPE:
+            case XPathResult.FIRST_ORDERED_NODE_TYPE:
+              return [processNode(result.singleNodeValue)];
+            default: return [`Unknown XPathResult type: ${result.resultType}`];
           }
         } catch (error) {
-          // console.error('Error during XPath evaluation in browser:', error); // Only visible with dumpio
           throw new Error(`XPath evaluation failed in browser: ${error.message}`);
         }
       }, selector);
       logDebug(`[XPATH] Evaluation successful.`);
-
+      logDebug(`[XPATH][DEBUG] Extracted Data:`, JSON.stringify(extractedData, null, 2));
     } else {
       // --- 6b. CSS Selector Extraction Logic ---
       logDebug(`[CSS] Waiting for CSS selector: ${selector}`);
       const elementHandle = await page.waitForSelector(selector, { timeout: 15000 });
       if (!elementHandle) {
-          // This case should ideally not be reached if waitForSelector resolves,
-          // but if it did, it's an error regardless of debug flag.
-          throw new Error(`CSS selector "${selector}" was found by waitForSelector, but handle is unexpectedly null.`);
+        throw new Error(`CSS selector "${selector}" was found by waitForSelector, but handle is unexpectedly null.`);
       }
       logDebug(`[CSS] Extracting outerHTML for selector: ${selector}`);
       extractedData = await elementHandle.evaluate(el => el.outerHTML);
+
       await elementHandle.dispose();
       logDebug(`[CSS] Extraction successful.`);
+
+      // Respond as RAW HTML for CSS
+      res.type('text/html').send(extractedData);
+      return;
     }
+
 
     // --- 7. Send Response ---
     logDebug('[RESPONSE] Sending extracted data to client.');
