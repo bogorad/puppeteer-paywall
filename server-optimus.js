@@ -71,6 +71,7 @@ app.post('/scrape', async (req, res) => {
     if (process.env.EXTENSION_PATHS) {
       logDebug(`[LAUNCH] Preparing extensions from: ${process.env.EXTENSION_PATHS}`);
       extensionArgs = [
+        `--proxy-server=socks5://r5s.bruc:1080`,
         `--disable-extensions-except=${process.env.EXTENSION_PATHS}`,
         `--load-extension=${process.env.EXTENSION_PATHS}`
       ];
