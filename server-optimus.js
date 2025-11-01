@@ -1,66 +1,213 @@
-require('dotenv').config();
-const express = require('express');
-const puppeteer = require('puppeteer-core');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+require("dotenv").config();
+const express = require("express");
+const puppeteer = require("puppeteer-core");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const app = express();
-// Middleware to parse incoming JSON request bodies
 app.use(express.json());
 
 // ========================================================================
-// Global Error Handlers (Always Log These)
+// Global Error Handlers
 // ========================================================================
-process.on('uncaughtException', (error) => {
-  console.error('[FATAL] Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("[FATAL] Uncaught Exception:", error);
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[FATAL] Unhandled Rejection at:', promise, 'Reason:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error(
+    "[FATAL] Unhandled Rejection at:",
+    promise,
+    "Reason:",
+    reason,
+  );
   process.exit(1);
 });
 
 // ========================================================================
-// Health Check Endpoint (Simple, No Debug Logging Needed)
+// Health Check Endpoint
 // ========================================================================
-app.get('/health', (req, res) => {
-  res.json({ status: 'alive', timestamp: Date.now() });
+app.get("/health", (req, res) => {
+  res.json({ status: "alive", timestamp: Date.now() });
 });
+
+// ========================================================================
+// Helper Function: Find and Duplicate Tab via Tab-Duplicator Extension
+// ========================================================================
+async function duplicateTabViaExtension(browser, logDebug) {
+  try {
+    logDebug(
+      "[DUPLICATE] Looking for tab-duplicator extension...",
+    );
+
+    const targets = await browser.targets();
+    logDebug(
+      `[DUPLICATE] Total targets: ${targets.length}`,
+    );
+
+    // Get all service workers
+    const serviceWorkers = targets.filter(
+      (t) =>
+        t.type() === "service_worker" &&
+        t.url().includes("chrome-extension://"),
+    );
+
+    logDebug(
+      `[DUPLICATE] Found ${serviceWorkers.length} extension service workers`,
+    );
+
+    // Find the tab-duplicator by sending identity check to each
+    let tabDuplicatorWorker = null;
+
+    for (const worker of serviceWorkers) {
+      try {
+        logDebug(
+          `[DUPLICATE] Checking identity of ${worker.url()}...`,
+        );
+        const workerContext = await worker.worker();
+
+        const identity = await Promise.race([
+          workerContext.evaluate(() => {
+            return new Promise((resolve) => {
+              chrome.runtime.sendMessage(
+                { action: "identify" },
+                (response) => {
+                  console.log(
+                    "[WORKER] Identity response:",
+                    response,
+                  );
+                  resolve(response);
+                },
+              );
+            });
+          }),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("timeout")),
+              1000,
+            ),
+          ),
+        ]).catch((e) => {
+          logDebug(`[DUPLICATE]   → Error: ${e.message}`);
+          return null;
+        });
+
+        logDebug(
+          `[DUPLICATE]   → identity=${identity?.identity || "unknown"}`,
+        );
+
+        if (
+          identity &&
+          identity.identity === "tab-duplicator"
+        ) {
+          logDebug(
+            `[DUPLICATE] ✓ FOUND tab-duplicator at: ${worker.url()}`,
+          );
+          tabDuplicatorWorker = worker;
+          break;
+        }
+      } catch (e) {
+        logDebug(
+          `[DUPLICATE] Worker evaluation error: ${e.message}`,
+        );
+        continue;
+      }
+    }
+
+    if (!tabDuplicatorWorker) {
+      throw new Error(
+        `Tab-duplicator extension not found among ${serviceWorkers.length} service workers. ` +
+          `Checked: ${serviceWorkers.map((w) => w.url()).join(", ")}`,
+      );
+    }
+
+    logDebug("[DUPLICATE] Sending duplicateTab command...");
+    const workerContext =
+      await tabDuplicatorWorker.worker();
+
+    const result = await workerContext.evaluate(() => {
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { action: "duplicateTab" },
+          (response) => {
+            console.log(
+              "[WORKER] Duplicate response:",
+              response,
+            );
+            if (chrome.runtime.lastError) {
+              console.error(
+                "[WORKER] Error:",
+                chrome.runtime.lastError,
+              );
+              reject(
+                new Error(chrome.runtime.lastError.message),
+              );
+            } else if (response && response.success) {
+              resolve(response);
+            } else if (!response) {
+              reject(
+                new Error("No response from extension"),
+              );
+            } else {
+              reject(
+                new Error(
+                  response.error || "Unknown error",
+                ),
+              );
+            }
+          },
+        );
+      });
+    });
+
+    logDebug(
+      `[DUPLICATE] ✓ Tab successfully duplicated. New tab ID: ${result.newTabId}`,
+    );
+    return result;
+  } catch (error) {
+    logDebug(`[DUPLICATE] Failed: ${error.message}`);
+    throw error;
+  }
+}
 
 // ========================================================================
 // Scraping Endpoint (`/scrape`)
 // ========================================================================
-app.post('/scrape', async (req, res) => {
-  // --- 1. Extract Request Data & Debug Flag ---
-  // Extract standard fields and the 'debug' flag. Default debug to false.
-  const { url, selector, method = 'css', debug = false } = req.body;
+app.post("/scrape", async (req, res) => {
+  const {
+    url,
+    selector,
+    method = "css",
+    debug = false,
+  } = req.body;
 
-  // --- Create a Conditional Logger ---
-  // This function will only log if the 'debug' flag for this request is true.
   const logDebug = (...args) => {
     if (debug) {
       console.log(...args);
     }
   };
 
-  // Log the raw request body ONLY if debug is enabled
-  logDebug('[DEBUG] Raw req.body received:', JSON.stringify(req.body, null, 2));
+  logDebug(
+    "[DEBUG] Raw req.body received:",
+    JSON.stringify(req.body, null, 2),
+  );
+  logDebug(
+    `[REQUEST] Processing scrape request: url=${url}, selector="${selector}", method=${method}, debug=${debug}`,
+  );
 
-  // Log basic request info ONLY if debug is enabled
-  logDebug(`[REQUEST] Processing scrape request: url=${url}, selector="${selector}", method=${method}, debug=${debug}`);
-
-  // Basic validation (Always perform, log warning only if debug enabled)
   if (!url || !selector) {
-    if (debug) { // Only log the warning if debugging this request
-        console.warn('[REQUEST] Bad Request: Missing url or selector.');
+    if (debug) {
+      console.warn(
+        "[REQUEST] Bad Request: Missing url or selector.",
+      );
     }
-    // Always return the error response regardless of debug flag
-    return res.status(400).json({ error: 'Missing required fields: url and selector' });
+    return res.status(400).json({
+      error: "Missing required fields: url and selector",
+    });
   }
 
-  // --- 2. Initialize Resources ---
   let browser = null;
   let page = null;
   let userDataDir = null;
@@ -69,212 +216,365 @@ app.post('/scrape', async (req, res) => {
     // --- 3. Prepare Browser Launch Options ---
     let extensionArgs = [];
     if (process.env.EXTENSION_PATHS) {
-      logDebug(`[LAUNCH] Preparing extensions from: ${process.env.EXTENSION_PATHS}`);
+      logDebug(
+        `[LAUNCH] Preparing extensions from: ${process.env.EXTENSION_PATHS}`,
+      );
+
+      // Split by COMMA (not colon), then filter empty strings
+      const extensionPaths =
+        process.env.EXTENSION_PATHS.split(",")
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0);
+
+      logDebug(
+        `[LAUNCH] Parsed ${extensionPaths.length} extension paths:`,
+      );
+      extensionPaths.forEach((p) => logDebug(`  - ${p}`));
+
+      const disableExcept = extensionPaths.join(",");
+      const loadExt = extensionPaths.join(",");
+
       extensionArgs = [
         `--proxy-server=socks5://r5s.bruc:1080`,
-        `--disable-extensions-except=${process.env.EXTENSION_PATHS}`,
-        `--load-extension=${process.env.EXTENSION_PATHS}`
+        `--disable-extensions-except=${disableExcept}`,
+        `--load-extension=${loadExt}`,
       ];
     }
 
-    // Create temporary user data directory
-    // No need to log the path unless debugging
-    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puppeteer-user-data-'));
-    logDebug(`[LAUNCH] Created temporary user data dir: ${userDataDir}`);
+    userDataDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "puppeteer-user-data-"),
+    );
+    logDebug(
+      `[LAUNCH] Created temporary user data dir: ${userDataDir}`,
+    );
 
     const launchArgs = [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--disable-gpu',
-      '--use-gl=swiftshader',
-      '--window-size=1280,720',
-      '--font-render-hinting=none',
-      ...extensionArgs
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--disable-gpu",
+      "--use-gl=swiftshader",
+      "--window-size=1280,720",
+      "--font-render-hinting=none",
+      "--enable-extensions", // <<< ADD THIS
+      "--enable-extension-assets", // <<< ADD THIS
+      ...extensionArgs,
     ];
 
-    // --- 4. Launch Browser ---
-    logDebug('[LAUNCH] Initializing browser instance...');
+    logDebug("[LAUNCH] Initializing browser instance...");
     browser = await puppeteer.launch({
-      executablePath: process.env.EXECUTABLE_PATH || '/usr/lib/chromium/chromium',
-      headless: false, // Consider 'new' if extensions support it and you don't need visual debugging
+      executablePath:
+        process.env.EXECUTABLE_PATH ||
+        "/usr/lib/chromium/chromium",
+      headless: false,
       userDataDir,
       args: launchArgs,
-      // Only dump browser IO if the request explicitly asks for debug AND env is development
-      dumpio: debug && process.env.NODE_ENV === 'development',
-      timeout: 60000
+      dumpio:
+        debug && process.env.NODE_ENV === "development",
+      timeout: 60000,
     });
-    logDebug('[LAUNCH] Browser launched successfully.');
+    logDebug("[LAUNCH] Browser launched successfully.");
 
-    // --- 5. Create Page and Navigate ---
-    logDebug('[NAVIGATE] Creating new page...');
+    // --- Debug: Check all loaded extension targets ---
+    logDebug(
+      "[LAUNCH] Checking all loaded extension targets...",
+    );
+    const allTargets = await browser.targets();
+    logDebug(
+      `[LAUNCH] Total targets: ${allTargets.length}`,
+    );
+    allTargets.forEach((t, i) => {
+      if (t.url().includes("chrome-extension://")) {
+        logDebug(
+          `  [${i}] type=${t.type()}, url=${t.url()}`,
+        );
+      }
+    });
+
+    logDebug("[NAVIGATE] Creating new page...");
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
 
-    logDebug('[NAVIGATE] Setting User-Agent...');
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36');
+    logDebug("[NAVIGATE] Setting User-Agent...");
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    );
 
-    // Optional Delay
-    logDebug('[DELAY] Waiting 3 seconds before navigating...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    logDebug(
+      "[DELAY] Waiting 3 seconds before navigating...",
+    );
+    await new Promise((resolve) =>
+      setTimeout(resolve, 3000),
+    );
 
     logDebug(`[NAVIGATE] Loading URL: ${url}`);
     await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 45000
+      waitUntil: "networkidle2",
+      timeout: 45000,
     });
     logDebug(`[NAVIGATE] Page loaded successfully: ${url}`);
 
-    // Moving mouse and scrolling
+    // --- NEW: Check if URL matches wsj.com and duplicate tab ---
+    if (url.includes("wsj.com/")) {
+      logDebug(
+        "[URL_MATCH] URL matches wsj.com/, attempting to duplicate tab...",
+      );
+      try {
+        await duplicateTabViaExtension(browser, logDebug);
+        logDebug("[URL_MATCH] Tab duplication completed.");
+      } catch (dupError) {
+        logDebug(
+          `[URL_MATCH] Tab duplication error (non-fatal): ${dupError.message}`,
+        );
+        // Continue scraping even if duplication fails
+      }
+    }
+
     logDebug(`[NAVIGATE END] move and scroll.`);
     await page.mouse.move(100, 100);
     await page.evaluate(() => window.scrollBy(0, 200));
 
-    const postNavDelay = (method === 'xpath') ? 5000 : 2000; // << choose duration per your needs
-    logDebug(`[DELAY] Waiting ${postNavDelay / 1000} seconds after navigation before extraction...`);
-    await new Promise(resolve => setTimeout(resolve, postNavDelay));
+    const postNavDelay = method === "xpath" ? 5000 : 2000;
+    logDebug(
+      `[DELAY] Waiting ${postNavDelay / 1000} seconds after navigation before extraction...`,
+    );
+    await new Promise((resolve) =>
+      setTimeout(resolve, postNavDelay),
+    );
 
     // --- 6. Extract Data (Conditional Logic: XPath vs CSS) ---
     let extractedData;
 
-    if (method === 'xpath') {
-      logDebug(`[XPATH] Evaluating XPath selector: ${selector}`);
-      extractedData = await page.evaluate((xpathSelector) => {
-        // Always returns an array
-        try {
-          const result = document.evaluate(xpathSelector, document, null, XPathResult.ANY_TYPE, null);
-          const results = [];
-          const processNode = (node) => {
-            if (!node) return null;
-            switch (node.nodeType) {
-              case Node.ELEMENT_NODE: return node.outerHTML;
-              case Node.ATTRIBUTE_NODE: case Node.TEXT_NODE: return node.nodeValue;
-              case Node.COMMENT_NODE: return `<!-- ${node.nodeValue} -->`;
-              default: return `Unsupported node type: ${node.nodeType}`;
+    if (method === "xpath") {
+      logDebug(
+        `[XPATH] Evaluating XPath selector: ${selector}`,
+      );
+      extractedData = await page.evaluate(
+        (xpathSelector) => {
+          try {
+            const result = document.evaluate(
+              xpathSelector,
+              document,
+              null,
+              XPathResult.ANY_TYPE,
+              null,
+            );
+            const results = [];
+            const processNode = (node) => {
+              if (!node) return null;
+              switch (node.nodeType) {
+                case Node.ELEMENT_NODE:
+                  return node.outerHTML;
+                case Node.ATTRIBUTE_NODE:
+                case Node.TEXT_NODE:
+                  return node.nodeValue;
+                case Node.COMMENT_NODE:
+                  return `<!-- ${node.nodeValue} -->`;
+                default:
+                  return `Unsupported node type: ${node.nodeType}`;
+              }
+            };
+            switch (result.resultType) {
+              case XPathResult.NUMBER_TYPE:
+                return [result.numberValue];
+              case XPathResult.STRING_TYPE:
+                return [result.stringValue];
+              case XPathResult.BOOLEAN_TYPE:
+                return [result.booleanValue];
+              case XPathResult.UNORDERED_NODE_ITERATOR_TYPE:
+              case XPathResult.ORDERED_NODE_ITERATOR_TYPE: {
+                let node;
+                while ((node = result.iterateNext())) {
+                  results.push(processNode(node));
+                }
+                return results;
+              }
+              case XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE:
+              case XPathResult.ORDERED_NODE_SNAPSHOT_TYPE: {
+                for (
+                  let i = 0;
+                  i < result.snapshotLength;
+                  i++
+                ) {
+                  results.push(
+                    processNode(result.snapshotItem(i)),
+                  );
+                }
+                return results;
+              }
+              case XPathResult.ANY_UNORDERED_NODE_TYPE:
+              case XPathResult.FIRST_ORDERED_NODE_TYPE:
+                return [
+                  processNode(result.singleNodeValue),
+                ];
+              default:
+                return [
+                  `Unknown XPathResult type: ${result.resultType}`,
+                ];
             }
-          };
-          switch (result.resultType) {
-            case XPathResult.NUMBER_TYPE: return [result.numberValue];
-            case XPathResult.STRING_TYPE: return [result.stringValue];
-            case XPathResult.BOOLEAN_TYPE: return [result.booleanValue];
-            case XPathResult.UNORDERED_NODE_ITERATOR_TYPE:
-            case XPathResult.ORDERED_NODE_ITERATOR_TYPE:
-              { let node; while ((node = result.iterateNext())) { results.push(processNode(node)); } return results; }
-            case XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE:
-            case XPathResult.ORDERED_NODE_SNAPSHOT_TYPE:
-              { for (let i = 0; i < result.snapshotLength; i++) { results.push(processNode(result.snapshotItem(i))); } return results; }
-            case XPathResult.ANY_UNORDERED_NODE_TYPE:
-            case XPathResult.FIRST_ORDERED_NODE_TYPE:
-              return [processNode(result.singleNodeValue)];
-            default: return [`Unknown XPathResult type: ${result.resultType}`];
+          } catch (error) {
+            throw new Error(
+              `XPath evaluation failed in browser: ${error.message}`,
+            );
           }
-        } catch (error) {
-          throw new Error(`XPath evaluation failed in browser: ${error.message}`);
-        }
-      }, selector);
+        },
+        selector,
+      );
       logDebug(`[XPATH] Evaluation successful.`);
-      logDebug(`[XPATH][DEBUG] Extracted Data:`, JSON.stringify(extractedData, null, 2));
+      logDebug(
+        `[XPATH][DEBUG] Extracted Data:`,
+        JSON.stringify(extractedData, null, 2),
+      );
     } else {
-      // --- 6b. CSS Selector Extraction Logic ---
-      logDebug(`[CSS] Waiting for CSS selector: ${selector}`);
-      const elementHandle = await page.waitForSelector(selector, { timeout: 15000 });
+      logDebug(
+        `[CSS] Waiting for CSS selector: ${selector}`,
+      );
+      const elementHandle = await page.waitForSelector(
+        selector,
+        { timeout: 15000 },
+      );
       if (!elementHandle) {
-        throw new Error(`CSS selector "${selector}" was found by waitForSelector, but handle is unexpectedly null.`);
+        throw new Error(
+          `CSS selector "${selector}" was found by waitForSelector, but handle is unexpectedly null.`,
+        );
       }
-      logDebug(`[CSS] Extracting outerHTML for selector: ${selector}`);
-      extractedData = await elementHandle.evaluate(el => el.outerHTML);
+      logDebug(
+        `[CSS] Extracting outerHTML for selector: ${selector}`,
+      );
+      extractedData = await elementHandle.evaluate(
+        (el) => el.outerHTML,
+      );
 
       await elementHandle.dispose();
       logDebug(`[CSS] Extraction successful.`);
 
-      // Respond as RAW HTML for CSS
-      res.type('text/html').send(extractedData);
+      res.type("text/html").send(extractedData);
       return;
     }
 
-
-    // --- 7. Send Response ---
-    logDebug('[RESPONSE] Sending extracted data to client.');
+    logDebug(
+      "[RESPONSE] Sending extracted data to client.",
+    );
     res.json(extractedData);
-
   } catch (error) {
-    // --- 8. Handle Errors During Scraping ---
-    // Always log the core error message
-    console.error('[ERROR] Scraping failed:', error.message);
-    // Log the full error details only if debugging this request OR in development env
-    if (debug || process.env.NODE_ENV === 'development') {
-        console.error('[ERROR] Full Error Details:', error);
+    console.error(
+      "[ERROR] Scraping failed:",
+      error.message,
+    );
+    if (debug || process.env.NODE_ENV === "development") {
+      console.error("[ERROR] Full Error Details:", error);
     }
 
     let statusCode = 500;
-    if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('exceeded')) { statusCode = 504; }
-    else if (error.message.includes('selector') && (error.message.includes('not found') || error.message.includes('failed to find element'))) { statusCode = 404; }
-    else if (error.message.includes('Navigation failed') || error.message.includes('net::ERR_')) { statusCode = 502; }
-    else if (error.message.includes('XPath evaluation failed')) { statusCode = 400; }
+    if (
+      error.name === "TimeoutError" ||
+      error.message.includes("timeout") ||
+      error.message.includes("exceeded")
+    ) {
+      statusCode = 504;
+    } else if (
+      error.message.includes("selector") &&
+      (error.message.includes("not found") ||
+        error.message.includes("failed to find element"))
+    ) {
+      statusCode = 404;
+    } else if (
+      error.message.includes("Navigation failed") ||
+      error.message.includes("net::ERR_")
+    ) {
+      statusCode = 502;
+    } else if (
+      error.message.includes("XPath evaluation failed")
+    ) {
+      statusCode = 400;
+    }
 
-    // Send error response
     res.status(statusCode).json({
-      error: 'Scraping failed',
+      error: "Scraping failed",
       details: error.message,
       type: error.constructor.name,
-      // Include stack trace only if debugging this request OR in development env
-      stack: (debug || process.env.NODE_ENV === 'development') ? error.stack : undefined
+      stack:
+        debug || process.env.NODE_ENV === "development"
+          ? error.stack
+          : undefined,
     });
-
   } finally {
-    // --- 9. Cleanup Resources ---
-    logDebug('[CLEANUP] Closing resources...');
+    logDebug("[CLEANUP] Closing resources...");
     if (page) {
       try {
         await page.close();
-        logDebug('[CLEANUP] Page closed.');
+        logDebug("[CLEANUP] Page closed.");
       } catch (e) {
-        // Log cleanup errors only if debugging
-        if (debug) console.error('[CLEANUP] Error closing page:', e);
+        if (debug)
+          console.error("[CLEANUP] Error closing page:", e);
       }
     }
     if (browser) {
       try {
         await browser.close();
-        logDebug('[CLEANUP] Browser closed.');
+        logDebug("[CLEANUP] Browser closed.");
       } catch (e) {
-        // Log cleanup errors only if debugging
-        if (debug) console.error('[CLEANUP] Error closing browser:', e);
+        if (debug)
+          console.error(
+            "[CLEANUP] Error closing browser:",
+            e,
+          );
       }
     }
     if (userDataDir) {
-      logDebug(`[CLEANUP] Removing user data dir: ${userDataDir}`);
+      logDebug(
+        `[CLEANUP] Removing user data dir: ${userDataDir}`,
+      );
       try {
         if (fs.promises && fs.promises.rm) {
-            await fs.promises.rm(userDataDir, { recursive: true, force: true });
+          await fs.promises.rm(userDataDir, {
+            recursive: true,
+            force: true,
+          });
         } else {
-            fs.rmdirSync(userDataDir, { recursive: true });
+          fs.rmdirSync(userDataDir, { recursive: true });
         }
-        logDebug('[CLEANUP] User data dir removed.');
+        logDebug("[CLEANUP] User data dir removed.");
       } catch (err) {
-        // Log cleanup errors only if debugging
-        if (debug) console.error('[CLEANUP] Failed to remove user data dir:', userDataDir, err);
+        if (debug)
+          console.error(
+            "[CLEANUP] Failed to remove user data dir:",
+            userDataDir,
+            err,
+          );
       }
     }
-    logDebug('[CLEANUP] Cleanup finished.');
+    logDebug("[CLEANUP] Cleanup finished.");
   }
 });
 
 // ========================================================================
-// Server Initialization (Always Log These)
+// Server Initialization
 // ========================================================================
 const PORT = process.env.PORT || 5555;
 app.listen(PORT, () => {
-  console.log(`[SERVER] Service started. Running on port ${PORT}`);
-  const execPath = process.env.EXECUTABLE_PATH || '/usr/lib/chromium/chromium';
-  console.log(`[CHROMIUM] Using executable path: ${execPath}`);
+  console.log(
+    `[SERVER] Service started. Running on port ${PORT}`,
+  );
+  const execPath =
+    process.env.EXECUTABLE_PATH ||
+    "/usr/lib/chromium/chromium";
+  console.log(
+    `[CHROMIUM] Using executable path: ${execPath}`,
+  );
   if (!fs.existsSync(execPath)) {
-      console.warn(`[WARNING] Chromium executable not found at specified path: ${execPath}`);
+    console.warn(
+      `[WARNING] Chromium executable not found at specified path: ${execPath}`,
+    );
   }
   if (process.env.EXTENSION_PATHS) {
-    console.log(`[CHROMIUM] Attempting to load extensions from: ${process.env.EXTENSION_PATHS}`);
+    console.log(
+      `[CHROMIUM] Attempting to load extensions from: ${process.env.EXTENSION_PATHS}`,
+    );
   } else {
-    console.log(`[CHROMIUM] No extensions configured to load.`);
+    console.log(
+      `[CHROMIUM] No extensions configured to load.`,
+    );
   }
 });
