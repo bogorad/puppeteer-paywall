@@ -1,0 +1,121 @@
+{
+  "Domani": {
+    "domain": "editorialedomani.it",
+    "allow_cookies": 1,
+    "block_regex": "(\\.editorialedomani\\.it\\/pelcro\\.js|js\\.pelcro\\.com\\/)",
+    "ld_json": "div.paywallbox|div.article-preview",
+    "cs_code": "[{\"cond\":\"div.article-faded\", \"rm_class\":\"article-faded\"}]",
+    "upd_version": "4.2.1.4"
+  },
+  "Entrepreneur": {
+    "domain": "entrepreneur.com",
+    "allow_cookies": 1,
+    "block_regex": "\\.tinypass\\.com",
+    "upd_version": "4.2.2.8"
+  },
+  "GaúchaZH": {
+    "domain": "gauchazh.clicrbs.com.br",
+    "allow_cookies": 1,
+    "block_regex": "\\.piano\\.io",
+    "cs_block": 1,
+    "cs_code": "[{\"cond\":\"div.m-paid-content > div.hidden\", \"rm_attrib\":\"class\"}]",
+    "upd_version": "4.2.2.5"
+  },
+  "Grupo Prensa Ibérica": {
+    "domain": "###_es_epiberica",
+    "group": [
+      "diariodemallorca.es",
+      "eldia.es",
+      "elperiodico.com",
+      "epe.es",
+      "farodevigo.es",
+      "informacion.es",
+      "laprovincia.es",
+      "levante-emv.com",
+      "lne.es",
+      "mallorcazeitung.es",
+      "superdeporte.es"
+    ],
+    "allow_cookies": 1,
+    "block_regex": "\\.piano\\.io",
+    "cs_code": "[{\"cond\":\"p.ft-helper-closenews\", \"rm_class\":\"ft-helper-closenews\"}]",
+    "upd_version": "4.2.1.6"
+  },
+  "L'Informé (not pro)": {
+    "domain": "linforme.com",
+    "allow_cookies": 1,
+    "useragent": "googlebot",
+    "upd_version": "4.2.2.9"
+  },
+  "Libération.fr": {
+    "domain": "liberation.fr",
+    "allow_cookies": 1,
+    "cs_dompurify": 1,
+    "cs_param": {"x-api-key": "a7X29mBvQeP1Ld98CgF2rK5uTzWY4h"},
+    "upd_version": "4.2.1.6"
+  },
+  "Memberstack": {
+    "domain": "memberstack.com",
+    "allow_cookies": 1,
+    "block_regex_general": "\\.memberstack\\.com\\/scripts\\/.+\\/memberstack\\.js",
+    "excluded_domains": ["memberstack.com"],
+    "upd_version": "4.2.2.8"
+  },
+  "Newspack (WordPress plugin)": {
+    "domain": "###_wp_newspack_gate",
+    "allow_cookies": 1,
+    "block_regex_general": "\\/wp-content\\/plugins\\/newspack-plugin\\/dist\\/memberships-gate-metering\\.js",
+    "upd_version": "4.2.1.7"
+  },
+  "Neue Zürcher Zeitung": {
+    "domain": "nzz.ch",
+    "allow_cookies": 1,
+    "block_regex": "\\.piano\\.io",
+    "cs_code": "[{\"cond\":\"div.barrier\", \"rm_attrib\":\"class\"}]",
+    "upd_version": "4.2.2.8"
+  },
+  "Quora": {
+    "domain": "quora.com",
+    "allow_cookies": 1,
+    "upd_version": "4.2.2.9"
+  },
+  "The New York Times": {
+    "domain": "nytimes.com",
+    "allow_cookies": 1,
+    "block_regex": "(\\.nytimes\\.com\\/(meter\\.js|svc\\/onsite-messaging\\/query)|mwcm\\.nyt\\.com\\/.+\\.js|cooking\\.nytimes\\.com\\/api\\/.+\\/access)",
+    "useragent_custom": "Mozilla/5.0 (compatible; Google-InspectionTool/1.0)",
+    "upd_version": "4.2.1.2"
+  },
+  "The Business Journals (unblock)": {
+    "domain": "bizjournals.com",
+    "allow_cookies": 1,
+    "block_regex": "\\.cxense\\.com",
+    "cs_dompurify": 1,
+    "upd_version": "4.2.1.9"
+  },
+  "The Market.ch": {
+    "domain": "themarket.ch",
+    "allow_cookies": 1,
+    "block_regex": "(\\.piano\\.io\\/|tms\\.danzz\\.ch\\/scripts\\/t\\.min\\.js)",
+    "block_host_perm_add": "danzz.ch",
+    "upd_version": "4.2.2.8"
+  },
+  "Verlagsgruppe Rhein Main": {
+    "domain": "###_de_vrm",
+    "group": [
+      "allgemeine-zeitung.de",
+      "echo-online.de",
+      "wiesbadener-kurier.de"
+    ],
+    "allow_cookies": 1,
+    "block_regex": "\\.piano\\.io",
+    "cs_dompurify": 1,
+    "upd_version": "4.2.2.8"
+  },
+  "War on the Rocks": {
+    "domain": "warontherocks.com",
+    "allow_cookies": 1,
+    "ld_json_url": "a[href^='https://warontherocks.com/subscribe']|div.tw\\:container.tw\\:mb-20>div",
+    "upd_version": "4.2.2.9"
+  }
+}

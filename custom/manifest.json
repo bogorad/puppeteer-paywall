@@ -1,0 +1,47 @@
+{
+  "background": {
+    "scripts": ["sites.js", "background.js"]
+  },
+  "content_security_policy": "script-src 'self'; object-src 'self'",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "magnolia_limited_permissions@12.34",
+      "update_url": "https://gitflic.ru/project/magnolia1234/bpc_updates/blob/raw?file=updates.json",
+      "strict_min_version": "86.0"
+    }
+  },
+  "browser_action": {
+    "default_popup": "options/popup.html",
+    "default_icon": {
+      "128": "bypass.png"
+    },
+    "theme_icons": [{
+        "light": "bypass-dark.png",
+        "dark": "bypass.png",
+        "size": 128
+      }
+    ]
+  },
+  "description": "Bypass Paywalls of news sites",
+  "homepage_url": "https://gitflic.ru/project/magnolia1234/bypass-paywalls-firefox-clean",
+  "icons": {
+    "128": "bypass.png"
+  },
+  "manifest_version": 2,
+  "name": "Bypass Paywalls Clean (c)",
+  "short_name": "Bypass Paywall",
+  "options_ui": {
+    "browser_style": true,
+    "open_in_tab": true,
+    "page": "options/options.html"
+  },
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab",
+    "webRequest",
+    "webRequestBlocking",
+    "*://*/*"
+  ],
+  "version": "4.2.3.0"
+}
