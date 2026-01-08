@@ -235,8 +235,7 @@ app.post("/scrape", async (req, res) => {
       const loadExt = extensionPaths.join(",");
 
       extensionArgs = [
-        // Proxy disabled temporarily for debugging
-        // `--proxy-server=socks5://r5s.bruc:1080`,
+        `--proxy-server=socks5://r5s.bruc:1080`,
         `--disable-extensions-except=${disableExcept}`,
         `--load-extension=${loadExt}`,
       ];
@@ -297,7 +296,8 @@ app.post("/scrape", async (req, res) => {
 
     browser = await puppeteer.launch({
       executablePath:
-        process.env.EXECUTABLE_PATH || "/usr/bin/chromium",
+        process.env.EXECUTABLE_PATH ||
+        "/usr/bin/chromium-browser",
       headless: "new",
       userDataDir,
       args: launchArgs,
@@ -453,10 +453,21 @@ app.post("/scrape", async (req, res) => {
         selector,
       );
       logDebug(`[XPATH] Evaluation successful.`);
-      logDebug(
-        `[XPATH][DEBUG] Extracted Data:`,
-        JSON.stringify(extractedData, null, 2),
-      );
+      
+      // Dump content if XPath found nothing
+      if (!extractedData || (Array.isArray(extractedData) && extractedData.length === 0)) {
+        console.warn(`[XPATH] No results found for selector: "${selector}". Dumping page content (truncated to 4096 chars):`);
+        try {
+          const content = await page.content();
+          const truncated = content.slice(0, 4096);
+          console.log(truncated);
+          if (content.length > 4096) {
+            console.log(`[XPATH] (Content truncated: ${content.length} total chars)`);
+          }
+        } catch (e) {
+          console.error("[XPATH] Failed to dump page content:", e.message);
+        }
+      }
     } else {
       logDebug(
         `[CSS] Waiting for CSS selector: ${selector}`,
@@ -495,6 +506,26 @@ app.post("/scrape", async (req, res) => {
     );
     if (debug || process.env.NODE_ENV === "development") {
       console.error("[ERROR] Full Error Details:", error);
+    }
+
+    // Dump content on selector timeout/error
+    if (
+      page && 
+      (error.name === "TimeoutError" || 
+       error.message.includes("timeout") || 
+       error.message.includes("selector"))
+    ) {
+      console.warn(`[ERROR] Selector issue detected. Dumping page content (truncated to 4096 chars):`);
+      try {
+        const content = await page.content();
+        const truncated = content.slice(0, 4096);
+        console.log(truncated);
+        if (content.length > 4096) {
+          console.log(`[ERROR] (Content truncated: ${content.length} total chars)`);
+        }
+      } catch (e) {
+        console.error("[ERROR] Could not dump page content:", e.message);
+      }
     }
 
     let statusCode = 500;
@@ -589,7 +620,8 @@ app.listen(PORT, () => {
     `[SERVER] Service started. Running on port ${PORT}`,
   );
   const execPath =
-    process.env.EXECUTABLE_PATH || "/usr/bin/chromium";
+    process.env.EXECUTABLE_PATH ||
+    "/usr/bin/chromium-browser";
   console.log(
     `[CHROMIUM] Using executable path: ${execPath}`,
   );

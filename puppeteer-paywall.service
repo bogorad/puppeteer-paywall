@@ -10,11 +10,13 @@ ExecStart=/home/chuck/.local/bin/node /home/chuck/git/puppeteer-paywall/server-o
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=EXECUTABLE_PATH=/usr/lib/chromium/chromium
-Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master,/home/chuck/git/puppeteer-paywall/uBOL-home/chromium"
+Environment=EXECUTABLE_PATH=/usr/bin/chromium-browser
+Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master,/home/chuck/git/puppeteer-paywall/uBOL-home/chromium"
 Environment=HOME=/root
+Environment=XDG_RUNTIME_DIR=/run/user/1002
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus
 # Fix D-Bus errors by disabling it
-Environment=DBUS_SESSION_BUS_ADDRESS=/dev/null
+# Environment=DBUS_SESSION_BUS_ADDRESS=/dev/null
 StandardOutput=journal
 StandardError=journal
 
