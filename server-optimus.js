@@ -235,7 +235,8 @@ app.post("/scrape", async (req, res) => {
       const loadExt = extensionPaths.join(",");
 
       extensionArgs = [
-        `--proxy-server=socks5://r5s.bruc:1080`,
+        // Proxy disabled temporarily for debugging
+        // `--proxy-server=socks5://r5s.bruc:1080`,
         `--disable-extensions-except=${disableExcept}`,
         `--load-extension=${loadExt}`,
       ];
@@ -257,22 +258,52 @@ app.post("/scrape", async (req, res) => {
       "--use-gl=swiftshader",
       "--window-size=1280,720",
       "--font-render-hinting=none",
-      "--enable-extensions", // <<< ADD THIS
-      "--enable-extension-assets", // <<< ADD THIS
+      "--enable-extensions",
+      "--enable-extension-assets",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-translate",
+      "--disable-notifications",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-web-security", // May help with extension loading
       ...extensionArgs,
     ];
 
     logDebug("[LAUNCH] Initializing browser instance...");
+
+    // Debug: Check DISPLAY environment variable
+    logDebug(
+      `[LAUNCH] DISPLAY environment variable: ${process.env.DISPLAY || "NOT SET"}`,
+    );
+
+    // Debug: Check current process resource limits
+    if (debug) {
+      try {
+        const { execSync } = require("child_process");
+        const limits = execSync(
+          `cat /proc/${process.pid}/limits | grep "open files"`,
+        ).toString();
+        logDebug(
+          `[LAUNCH] Current process limits: ${limits.trim()}`,
+        );
+      } catch (e) {
+        logDebug(
+          `[LAUNCH] Could not read process limits: ${e.message}`,
+        );
+      }
+    }
+
     browser = await puppeteer.launch({
       executablePath:
-        process.env.EXECUTABLE_PATH ||
-        "/usr/lib/chromium/chromium",
-      headless: false,
+        process.env.EXECUTABLE_PATH || "/usr/bin/chromium",
+      headless: "new",
       userDataDir,
       args: launchArgs,
-      dumpio:
-        debug && process.env.NODE_ENV === "development",
+      dumpio: true, // Keep logging for now
       timeout: 60000,
+      env: process.env,
     });
     logDebug("[LAUNCH] Browser launched successfully.");
 
@@ -558,8 +589,7 @@ app.listen(PORT, () => {
     `[SERVER] Service started. Running on port ${PORT}`,
   );
   const execPath =
-    process.env.EXECUTABLE_PATH ||
-    "/usr/lib/chromium/chromium";
+    process.env.EXECUTABLE_PATH || "/usr/bin/chromium";
   console.log(
     `[CHROMIUM] Using executable path: ${execPath}`,
   );

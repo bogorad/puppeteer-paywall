@@ -15,6 +15,9 @@ Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care
 StandardOutput=journal
 StandardError=journal
 
+# Resource Limits - Increase file descriptors for Chromium + extensions
+LimitNOFILE=65536
+LimitNPROC=4096
 
 # If your project uses environment variables or a .env file, source it or set here
 # Environment=MY_ENV_VAR=xyz
