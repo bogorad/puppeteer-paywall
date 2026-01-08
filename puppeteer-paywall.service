@@ -4,24 +4,23 @@ After=network.target
 
 [Service]
 Type=simple
-User=chuck
+User=root
 WorkingDirectory=/home/chuck/git/puppeteer-paywall
-ExecStart=/usr/bin/xvfb-run -a /usr/bin/node /home/chuck/git/puppeteer-paywall/server-optimus.js
+ExecStart=/home/chuck/.local/bin/node /home/chuck/git/puppeteer-paywall/server-optimus.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=EXECUTABLE_PATH=/usr/lib/chromium/chromium
-Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master"
+Environment=EXTENSION_PATHS="/home/chuck/git/puppeteer-paywall/I-Still-Dont-Care-About-Cookies/src,/home/chuck/git/puppeteer-paywall/bypass-paywalls-chrome-clean-master,/home/chuck/git/puppeteer-paywall/uBOL-home/chromium"
+Environment=HOME=/root
+# Fix D-Bus errors by disabling it
+Environment=DBUS_SESSION_BUS_ADDRESS=/dev/null
 StandardOutput=journal
 StandardError=journal
 
-# Resource Limits - Increase file descriptors for Chromium + extensions
+# Resource Limits
 LimitNOFILE=65536
 LimitNPROC=4096
 
-# If your project uses environment variables or a .env file, source it or set here
-# Environment=MY_ENV_VAR=xyz
-
 [Install]
 WantedBy=multi-user.target
-
